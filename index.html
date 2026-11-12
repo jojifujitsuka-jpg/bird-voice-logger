@@ -3,54 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>野鳥音声記録アプリ</title>
+    <title>音声カタカナロガー</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans pb-12">
-    <div class="max-w-md mx-auto p-4">
-        <header class="mb-6 text-center">
-            <h1 class="text-2xl font-bold text-green-700">野鳥ボイスロガー</h1>
-            <p class="text-sm text-gray-500 mt-1">声をカタカナに変換してタイムスタンプ付きで記録</p>
+    <div class="max-w-md mx-auto p-4 flex flex-col min-h-screen">
+        <header class="mb-4 text-center">
+            <h1 class="text-2xl font-bold text-blue-700">音声カタカナロガー</h1>
+            <p class="text-xs text-gray-500 mt-1">タイムスタンプ付き記録＆CSV出力</p>
         </header>
 
-        <!-- 操作パネル -->
-        <div class="bg-white rounded-2xl shadow p-5 mb-6 text-center">
-            <div id="status" class="text-sm text-gray-600 mb-3">マイクボタンを押して鳥の名前を話してください</div>
+        <!-- 入力パネル -->
+        <div class="bg-white rounded-2xl shadow p-4 mb-4">
+            <label for="wordInput" class="block text-sm text-gray-600 mb-2">言葉を入力・または音声入力</label>
             
-            <button id="recordBtn" onclick="toggleListening()" class="w-20 h-20 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center mx-auto shadow-lg transition transform active:scale-95">
-                <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-            </button>
-            <div id="liveText" class="mt-4 text-xl font-bold text-gray-800 min-h-[32px]">---</div>
+            <div class="flex gap-2">
+                <input type="text" id="wordInput" placeholder="例: セグロセキレイ" 
+                    class="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                
+                <button type="button" onclick="addRecord()" class="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold px-5 py-3 rounded-xl shadow transition">
+                    追加
+                </button>
+            </div>
         </div>
 
-        <!-- 記録管理ボタン -->
+        <!-- 記録管理・出力ボタン -->
         <div class="flex justify-between items-center mb-3">
             <h2 class="font-bold text-gray-700">記録一覧 (<span id="count">0</span>件)</h2>
             <div class="space-x-2">
-                <button onclick="exportCSV()" class="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1.5 rounded-lg shadow">
-                    LibreOffice用CSV出力
+                <button type="button" onclick="exportCSV()" class="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1.5 rounded-lg shadow">
+                    CSV出力
                 </button>
-                <button onclick="clearAll()" class="bg-red-50 hover:bg-red-100 text-red-600 text-sm px-3 py-1.5 rounded-lg">
+                <button type="button" onclick="clearAll()" class="bg-red-50 hover:bg-red-100 text-red-600 text-sm px-3 py-1.5 rounded-lg">
                     全削除
                 </button>
             </div>
         </div>
 
-        <!-- リスト表示 -->
-        <div id="recordList" class="space-y-2">
-            <!-- 記録がここに追加されます -->
+        <!-- 記録リスト -->
+        <div id="recordList" class="space-y-2 flex-1 pb-6">
+            <div class="text-center text-gray-400 py-8 bg-white rounded-xl shadow-sm">まだ記録がありません</div>
         </div>
     </div>
 
     <script>
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition;
-        let isListening = false;
-        let records = JSON.parse(localStorage.getItem('bird_records') || '[]');
+        // データの読み込み
+        let records = [];
+        try {
+            const saved = localStorage.getItem('katakana_logger_records');
+            if (saved) {
+                records = JSON.parse(saved);
+            }
+        } catch (e) {
+            records = [];
+        }
 
-        // 野鳥特有の漢字・読み方マッピング辞書
-        const birdDictionary = {
-            "ツメナガセキレイ": "ツメナガセキレイ", "爪長鶺鴒": "ツメナガセキレイ", "爪長せきれい": "ツメナガセキレイ", "つめながせきれい": "ツメナガセキレイ",
-            "シジュウカラ": "シジュウカラ", "四十雀": "シジュウカラ",
+        const inputElement = document.getElementById('wordInput');
+
+        // Enterキーでも追加できるようにする
+        inputElement.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addRecord();
+            }
+        });
+
+        function addRecord() {
+            const rawText = inputElement.value.trim();
+            if (!rawText) return;
+
+            // ひらがなや混ざった文字をすべて全角カタカナに変換
+            const katakanaName = convertToKatakana(rawText);
+            
+            // 現在時刻の作成
+            const now = new Date();
+            const timeString = now.getFullYear() + '/' +
+                String(now.getMonth() + 1).padStart(2, '0') + '/' +
+                String(now.getDate()).padStart(2, '0') + ' ' +
+                String(now.getHours()).padStart(2, '0') + ':' +
