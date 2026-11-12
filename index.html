@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>野鳥音声記録アプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans pb-12">
+    <div class="max-w-md mx-auto p-4">
+        <header class="mb-6 text-center">
+            <h1 class="text-2xl font-bold text-green-700">野鳥ボイスロガー</h1>
+            <p class="text-sm text-gray-500 mt-1">声をカタカナに変換してタイムスタンプ付きで記録</p>
+        </header>
+
+        <!-- 操作パネル -->
+        <div class="bg-white rounded-2xl shadow p-5 mb-6 text-center">
+            <div id="status" class="text-sm text-gray-600 mb-3">マイクボタンを押して鳥の名前を話してください</div>
+            
+            <button id="recordBtn" onclick="toggleListening()" class="w-20 h-20 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center mx-auto shadow-lg transition transform active:scale-95">
+                <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+            </button>
+            <div id="liveText" class="mt-4 text-xl font-bold text-gray-800 min-h-[32px]">---</div>
+        </div>
+
+        <!-- 記録管理ボタン -->
+        <div class="flex justify-between items-center mb-3">
+            <h2 class="font-bold text-gray-700">記録一覧 (<span id="count">0</span>件)</h2>
+            <div class="space-x-2">
+                <button onclick="exportCSV()" class="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1.5 rounded-lg shadow">
+                    LibreOffice用CSV出力
+                </button>
+                <button onclick="clearAll()" class="bg-red-50 hover:bg-red-100 text-red-600 text-sm px-3 py-1.5 rounded-lg">
+                    全削除
+                </button>
+            </div>
+        </div>
+
+        <!-- リスト表示 -->
+        <div id="recordList" class="space-y-2">
+            <!-- 記録がここに追加されます -->
+        </div>
+    </div>
+
+    <script>
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+        let isListening = false;
+        let records = JSON.parse(localStorage.getItem('bird_records') || '[]');
+
+        // 野鳥特有の漢字・読み方マッピング辞書
+        const birdDictionary = {
+            "ツメナガセキレイ": "ツメナガセキレイ", "爪長鶺鴒": "ツメナガセキレイ", "爪長せきれい": "ツメナガセキレイ", "つめながせきれい": "ツメナガセキレイ",
+            "シジュウカラ": "シジュウカラ", "四十雀": "シジュウカラ",
